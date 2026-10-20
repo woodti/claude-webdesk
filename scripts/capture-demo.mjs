@@ -16,10 +16,11 @@ try {
   await page.goto(`http://127.0.0.1:${app.server.address().port}/#token=${token}`);
   await page.waitForSelector('#workspace:not([hidden])');
   await page.fill('#prompt','Review the checkout flow. Find a focused fix for duplicate submissions and suggest tests.');
+  await page.click('#settings-toggle');
   await page.fill('#model','sonnet');
   await page.fill('#budget','1.00');
   await page.click('#run');
-  await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('Completed'));
+  await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('已完成'));
   await page.waitForSelector('#metrics:not([hidden])');
   await page.screenshot({path:'docs/screenshot.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});

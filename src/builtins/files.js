@@ -9,18 +9,18 @@ const hidden = name => name.startsWith('.') || ['node_modules', '__pycache__'].i
 export function filesPlugin({ options }) {
   const rootPath = options.cwd;
   async function locate(value = '') {
-    if (typeof value !== 'string' || value.includes('\0') || value.includes('\\') || path.isAbsolute(value)) throw new HttpError(400, 'Use a relative file path');
+    if (typeof value !== 'string' || value.includes('\0') || value.includes('\\') || path.isAbsolute(value)) throw new HttpError(400, '请使用相对文件路径');
     const parts = value.split('/').filter(Boolean);
-    if (parts.some(p => p === '..' || hidden(p))) throw new HttpError(403, 'Private paths are not shared');
+    if (parts.some(p => p === '..' || hidden(p))) throw new HttpError(403, '隐藏或私密路径不共享');
     const root = await realpath(rootPath);
     let target = root;
     for (const part of parts) {
       target = path.join(target, part);
-      if ((await lstat(target)).isSymbolicLink()) throw new HttpError(403, 'Symbolic links are not shared');
+      if ((await lstat(target)).isSymbolicLink()) throw new HttpError(403, '符号链接不共享');
     }
     const resolved = await realpath(target);
     const rel = path.relative(root, resolved);
-    if (rel === '..' || rel.startsWith('../') || path.isAbsolute(rel)) throw new HttpError(403, 'Path outside workspace');
+    if (rel === '..' || rel.startsWith('../') || path.isAbsolute(rel)) throw new HttpError(403, '路径超出项目目录');
     return resolved;
   }
   return {
@@ -32,7 +32,7 @@ export function filesPlugin({ options }) {
         if (route === '/api/files' && req.method === 'GET') {
           const relative = url.searchParams.get('path') || '';
           const folder = await locate(relative);
-          if (!(await lstat(folder)).isDirectory()) throw new HttpError(400, 'Not a directory');
+          if (!(await lstat(folder)).isDirectory()) throw new HttpError(400, '不是目录');
           const entries = [];
           for (const entry of (await readdir(folder, { withFileTypes: true })).sort((a,b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name))) {
             if (hidden(entry.name) || entry.isSymbolicLink() || (!entry.isFile() && !entry.isDirectory())) continue;
@@ -47,7 +47,7 @@ export function filesPlugin({ options }) {
           const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
           try {
             const stat = await handle.stat();
-            if (!stat.isFile()) throw new HttpError(400, 'Not a regular file');
+            if (!stat.isFile()) throw new HttpError(400, '不是普通文件');
             res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': stat.size,
               'Content-Disposition': `attachment; filename="download"; filename*=UTF-8''${encodeURIComponent(path.basename(file)).replace(/'/g, '%27')}`,
               'Content-Security-Policy': "default-src 'none'; sandbox" });
@@ -59,9 +59,9 @@ export function filesPlugin({ options }) {
           return true;
         }
         if (route === '/api/files/upload' && req.method === 'POST') {
-          if (Number(req.headers['content-length']) > LIMIT) throw new HttpError(413, 'Maximum upload is 25 MiB');
+          if (Number(req.headers['content-length']) > LIMIT) throw new HttpError(413, '单文件不能超过 25 MiB');
           const name = url.searchParams.get('name') || 'upload';
-          if (name.length > 180 || /[/\\\x00-\x1f]/.test(name) || hidden(name)) throw new HttpError(400, 'Invalid or private file name');
+          if (name.length > 180 || /[/\\\x00-\x1f]/.test(name) || hidden(name)) throw new HttpError(400, '文件名无效或为私密文件');
           const base = await realpath(rootPath);
           await mkdir(path.join(base, 'webdesk-uploads'), { recursive: true, mode: 0o700 });
           const folder = await locate('webdesk-uploads');
@@ -71,7 +71,7 @@ export function filesPlugin({ options }) {
           try {
             for await (const chunk of req) {
               size += chunk.length;
-              if (size > LIMIT) throw new HttpError(413, 'Maximum upload is 25 MiB');
+              if (size > LIMIT) throw new HttpError(413, '单文件不能超过 25 MiB');
               let offset = 0;
               while (offset < chunk.length) offset += (await handle.write(chunk, offset)).bytesWritten;
             }
@@ -80,8 +80,8 @@ export function filesPlugin({ options }) {
           json(res, 201, { name, size, path: path.relative(base, file), absolutePath: file }); return true;
         }
       } catch (e) {
-        if (e.code === 'ENOENT') throw new HttpError(404, 'File not found');
-        if (['EACCES','ELOOP'].includes(e.code)) throw new HttpError(403, 'File access denied');
+        if (e.code === 'ENOENT') throw new HttpError(404, '文件不存在');
+        if (['EACCES','ELOOP'].includes(e.code)) throw new HttpError(403, '无权访问该文件');
         throw e;
       }
       return false;

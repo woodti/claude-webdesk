@@ -44,16 +44,17 @@ export function workbenchPlugin({ tasks, history, refresh, streams }) {
       );
       if (match && UUID.test(match[1])) {
         const id = match[1],
-          action = match[2],
-          item = tasks.items.get(id);
-        if (!item) throw new HttpError(404, "任务不存在");
+          action = match[2];
+        if (!tasks.items.has(id)) throw new HttpError(404, "任务不存在");
         if (action === "stop" && req.method === "POST")
           return respond(
             200,
             tasks.stop(id, (await body(req)).signal || "SIGINT"),
           );
-        if (!action && req.method === "GET") return respond(200, item);
+        if (!action && req.method === "GET")
+          return respond(200, await tasks.get(id));
         if (action === "events" && req.method === "GET") {
+          const item = await tasks.get(id);
           if (streams.size >= 64) throw new HttpError(429, "流式连接过多");
           res.writeHead(200, {
             "Content-Type": "text/event-stream; charset=utf-8",

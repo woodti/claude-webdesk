@@ -30,9 +30,10 @@ function showError(error) {
   node.hidden = false;
 }
 async function navigate(id) {
+  $("workspace").classList.remove("nav-open");
   if (id === "files") {
     await navigate("workbench");
-    document.getElementById("file-browser").scrollIntoView({ behavior: "smooth" });
+    workbench.showFiles();
     return;
   }
   const plugin = plugins.find((p) => p.id === id && p.enabled);
@@ -43,6 +44,7 @@ async function navigate(id) {
   $("workbench-sidebar").hidden = !native;
   $("workbench-view").hidden = !native;
   $("plugin-view").hidden = native;
+  if (!native) $("file-browser").hidden = true;
   for (const button of $("tool-nav").querySelectorAll("button")) {
     button.classList.toggle("selected", button.dataset.plugin === id);
     button.setAttribute(
@@ -145,6 +147,9 @@ $("logout").addEventListener("click", async () => {
     showError(error);
   }
 });
+for (const button of document.querySelectorAll(".menu-toggle"))
+  button.addEventListener("click", () => $("workspace").classList.toggle("nav-open"));
+$("scrim").addEventListener("click", () => $("workspace").classList.remove("nav-open"));
 $("reload-plugin").addEventListener("click", () => {
   const plugin = plugins.find((p) => p.id === active);
   if (plugin?.available) $("plugin-frame").src = plugin.entry;
@@ -181,7 +186,8 @@ window.addEventListener("message", async (event) => {
     }
   }
 });
-const token = new URLSearchParams(location.hash.slice(1)).get("token") || new URL(location.href).searchParams.get("token");
+// Only fragments are accepted so tokens never reach HTTP or proxy access logs.
+const token = new URLSearchParams(location.hash.slice(1)).get("token");
 if (token) {
   history.replaceState(null, "", location.pathname);
   $("token").value = token;

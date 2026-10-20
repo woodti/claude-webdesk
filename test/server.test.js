@@ -51,7 +51,7 @@ async function completed(app, id) {
     const item = app.tasks.items.get(id);
     if (!["running", "stopping"].includes(item.status)) {
       await app.tasks.writes;
-      return item;
+      return app.tasks.get(id);
     }
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
@@ -334,4 +334,37 @@ test("shutdown waits for pending validation and prevents orphan task startup", a
   await closing;
   assert.equal(app.tasks.active, null);
   assert.equal(app.tasks.items.size, 0);
+});
+test("a corrupt task record is set aside instead of blocking startup", async (t) => {
+  const app = await fixture(t);
+  const file = path.join(app.opts.dataDir, "44444444-4444-4444-8444-444444444444.json");
+  await writeFile(file, "{broken");
+  const second = await createServer(app.opts);
+  t.after(() => second.close());
+  assert.equal(second.tasks.items.size, 0);
+  assert.match(await readFile(`${file}.corrupt`, "utf8"), /broken/);
+});
+test("finished tasks keep only summaries in memory and load details from disk", async (t) => {
+  const app = await fixture(t);
+  const item = await app.tasks.start({ prompt: "hello" });
+  const final = await completed(app, item.id);
+  assert.match(final.output, /const answer/);
+  assert.ok(!("events" in app.tasks.items.get(item.id)));
+  const detail = await (await app.request(`/api/tasks/${item.id}`)).json();
+  assert.equal(detail.output, final.output);
+  assert.equal(detail.threadId, "11111111-1111-4111-8111-111111111111");
+});
+test("session index reparses only changed transcripts", async (t) => {
+  const app = await fixture(t);
+  const dir = path.join(app.home, "projects", "demo");
+  await mkdir(dir, { recursive: true });
+  const file = path.join(dir, "55555555-5555-4555-8555-555555555555.jsonl");
+  const row = (text) => JSON.stringify({ type: "user", cwd: app.root, message: { content: text } }) + "\n";
+  await writeFile(file, row("first"));
+  assert.equal((await app.history.refresh())[0].title, "first");
+  const cached = app.history.cache.get(file).item;
+  await app.history.refresh();
+  assert.equal(app.history.cache.get(file).item, cached);
+  await writeFile(file, row("second") + row("more"));
+  assert.equal((await app.history.refresh())[0].title, "second");
 });

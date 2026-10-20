@@ -1,5 +1,11 @@
 let api, current = '', bound = false;
 const $ = id => document.getElementById(id);
+// Keep the auto-growing prompt in sync when paths are inserted programmatically.
+function append(line) {
+  const prompt = $('prompt');
+  prompt.value += (prompt.value && !prompt.value.endsWith('\n') ? '\n' : '') + line;
+  prompt.dispatchEvent(new Event('input'));
+}
 function report(e) { $('upload-status').textContent = e.message || String(e); }
 async function browse(folder = current) {
   const data = await api('/api/files?path=' + encodeURIComponent(folder));
@@ -17,7 +23,7 @@ async function browse(folder = current) {
     if (entry.directory) name.onclick = () => browse(entry.path).catch(report);
     const actions = document.createElement('div');
     const attach = document.createElement('button'); attach.textContent = '引用路径';
-    attach.onclick = () => { $('prompt').value += `\n${JSON.stringify(data.root + '/' + entry.path)}`; $('prompt').focus(); };
+    attach.onclick = () => { append(JSON.stringify(data.root + '/' + entry.path)); $('prompt').focus(); };
     actions.append(attach);
     if (!entry.directory) {
       const size = document.createElement('small'); size.textContent = (entry.size / 1024).toFixed(1) + ' KB';
@@ -38,11 +44,12 @@ async function upload(files) {
       xhr.onload = () => { let data; try { data = JSON.parse(xhr.responseText); } catch { reject(new Error('上传响应无效')); return; } xhr.status === 201 ? resolve(data) : reject(new Error(data.error || '上传失败')); };
       xhr.onerror = () => reject(new Error('上传连接中断')); xhr.send(file);
     });
-    $('prompt').value += `\n请读取上传文件：${JSON.stringify(result.absolutePath)}`;
+    append(`请读取上传文件：${JSON.stringify(result.absolutePath)}`);
     $('upload-status').textContent = '✓ 已上传并附加路径 · ' + result.name;
   }
-  await browse();
+  if (!$('file-browser').hidden) await browse();
 }
+export const browseFiles = () => browse();
 let uploading = false;
 async function enqueue(files) {
   if (uploading) { report(new Error('请等待当前上传完成')); return; }
@@ -61,5 +68,4 @@ export async function initializeFiles(client) {
     drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('dragging'); enqueue([...e.dataTransfer.files]); });
     $('prompt').addEventListener('paste', e => { const files = [...(e.clipboardData?.files || [])]; if (files.length) { e.preventDefault(); enqueue(files); } });
   }
-  await browse().catch(report);
 }

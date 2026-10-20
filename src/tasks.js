@@ -21,6 +21,8 @@ export class HttpError extends Error {
     this.status = status;
   }
 }
+// Large logs stay on disk; memory keeps only list metadata for finished tasks.
+const summary = ({ events, raw, output, _streamed, ...item }) => item;
 export function buildArgs(input) {
   const args = ["--print", "--verbose", "--output-format", "stream-json",
     "--include-partial-messages", "--permission-mode", input.permissionMode,
@@ -47,9 +49,17 @@ export class Tasks extends EventEmitter {
     await mkdir(this.options.dataDir, { recursive: true, mode: 0o700 });
     for (const name of await readdir(this.options.dataDir)) {
       if (!/^[a-f0-9-]+\.json$/.test(name)) continue;
-      const item = JSON.parse(
-        await readFile(path.join(this.options.dataDir, name), "utf8"),
-      );
+      const file = path.join(this.options.dataDir, name);
+      let item;
+      try {
+        item = JSON.parse(await readFile(file, "utf8"));
+        if (!item || typeof item.startedAt !== "string") throw new Error("missing startedAt");
+      } catch (e) {
+        // One damaged record must not prevent the service from starting.
+        console.error(`Skipping unreadable task record ${name}: ${e.message}`);
+        await rename(file, `${file}.corrupt`).catch(() => {});
+        continue;
+      }
       if (!UUID.test(item.id)) continue;
       if (["running", "stopping"].includes(item.status)) {
         item.status = "interrupted";
@@ -57,13 +67,25 @@ export class Tasks extends EventEmitter {
         item.endedAt = new Date().toISOString();
         await this.save(item);
       }
-      this.items.set(item.id, item);
+      this.items.set(item.id, summary(item));
     }
   }
   list() {
     return [...this.items.values()]
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
-      .map(({ events, raw, output, ...item }) => item);
+      .map(summary);
+  }
+  async get(id) {
+    if (!this.items.has(id)) return null;
+    if (this.active?.item.id === id) return this.active.item;
+    await this.writes.catch(() => {});
+    try {
+      return JSON.parse(
+        await readFile(path.join(this.options.dataDir, `${id}.json`), "utf8"),
+      );
+    } catch {
+      throw new HttpError(500, "任务记录读取失败");
+    }
   }
   save(item) {
     const snapshot = JSON.stringify(item);
@@ -108,12 +130,12 @@ export class Tasks extends EventEmitter {
     if (!["", "low", "medium", "high", "xhigh", "max"].includes(result.effort))
       throw new HttpError(400, "推理强度无效");
     if (!["plan", "acceptEdits", "dontAsk"].includes(result.permissionMode))
-      throw new HttpError(400, "Unsupported permission mode");
+      throw new HttpError(400, "权限模式无效");
     if (result.maxBudgetUsd !== null && (typeof result.maxBudgetUsd !== "number" ||
         !Number.isFinite(result.maxBudgetUsd) || result.maxBudgetUsd <= 0 || result.maxBudgetUsd > 1000))
-      throw new HttpError(400, "Budget must be a number between 0 and 1000 USD");
+      throw new HttpError(400, "预算必须是 0–1000 之间的美元金额");
     if (typeof result.forkSession !== "boolean" || (result.forkSession && !result.resumeId))
-      throw new HttpError(400, "Fork requires a session to resume");
+      throw new HttpError(400, "分叉会话需要先选择要继续的会话");
     if (result.resumeId && !UUID.test(result.resumeId))
       throw new HttpError(400, "会话 ID 无效");
     if (
@@ -220,7 +242,7 @@ export class Tasks extends EventEmitter {
           active.persistTimer = setTimeout(() => {
             active.persistTimer = null;
             this.save(item).catch((e) => this.emit("storageError", e));
-          }, 1000);
+          }, 3000);
       };
       const raw = (stream, text) => {
         if (!text) return;
@@ -296,6 +318,7 @@ export class Tasks extends EventEmitter {
         } catch (e) {
           this.emit("storageError", e);
         }
+        if (this.items.get(item.id) === item) this.items.set(item.id, summary(item));
       });
       return item;
     } finally {

@@ -4,9 +4,10 @@ import { createInterface } from 'node:readline';
 import path from 'node:path';
 export const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export class History {
-  constructor(home) { this.home = home; this.index = new Map(); }
+  constructor(home) { this.home = home; this.index = new Map(); this.cache = new Map(); }
   async refresh() {
-    const index = new Map();
+    // Reparse only transcripts whose size or mtime changed since the last scan.
+    const index = new Map(), cache = new Map();
     const root = path.join(this.home, 'projects');
     try {
       if ((await lstat(root)).isSymbolicLink()) { this.index = index; return []; }
@@ -15,12 +16,19 @@ export class History {
         for (const entry of await readdir(path.join(root, project.name), { withFileTypes: true })) {
           if (!entry.isFile() || !entry.name.endsWith('.jsonl') || !UUID.test(entry.name.slice(0, -6))) continue;
           const file = path.join(root, project.name, entry.name);
-          const item = await this.read(file, false);
+          let info, item;
+          try {
+            info = await lstat(file);
+            const key = `${info.mtimeMs}:${info.size}`;
+            item = this.cache.get(file)?.key === key ? this.cache.get(file).item : await this.read(file, false);
+            if (item) cache.set(file, { key, item });
+          } catch (e) { if (e.code === 'ENOENT') continue; throw e; } // Deleted while scanning.
           if (item && (!index.has(item.id) || item.updated > index.get(item.id).updated)) index.set(item.id, { ...item, file });
         }
       }
     } catch (e) { if (!['ENOENT', 'EACCES'].includes(e.code)) throw e; }
     this.index = index;
+    this.cache = cache;
     return this.list();
   }
   list() { return [...this.index.values()].sort((a,b) => b.updated.localeCompare(a.updated)).map(({file, ...item}) => item); }

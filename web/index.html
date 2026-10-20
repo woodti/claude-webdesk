@@ -26,6 +26,7 @@
       </form>
     </div>
     <div id="workspace" class="layout" hidden>
+      <div class="scrim" id="scrim"></div>
       <aside class="sidebar">
         <a class="brand" href="/"
           ><span class="brand-icon">⌘</span
@@ -36,7 +37,7 @@
         </div>
         <nav id="tool-nav" class="tool-nav" aria-label="工具导航"></nav>
         <div id="workbench-sidebar">
-          <button id="new-task" class="new-task">＋ 新建任务</button>
+          <button id="new-task" class="new-task">＋ 新对话</button>
           <div class="history-tabs">
             <button id="web-history" class="selected">Web 任务</button
             ><button id="cli-history">CLI 会话</button>
@@ -45,7 +46,7 @@
             <input
               id="search"
               type="search"
-              placeholder="搜索标题、项目、Prompt…"
+              placeholder="搜索对话、项目…"
               aria-label="搜索历史"
             />
           </div>
@@ -59,149 +60,113 @@
           <span>SELF-HOSTED · v0.1</span><button id="logout">退出登录</button>
         </footer>
       </aside>
-      <main id="workbench-view">
-        <header>
-          <div>
-            <span class="eyebrow">YOUR SERVER. YOUR WORKFLOW.</span>
-            <h1>任务工作台</h1>
+      <main id="workbench-view" class="workbench">
+        <header class="chat-header">
+          <button type="button" class="menu-toggle" aria-label="打开侧边栏">☰</button>
+          <div class="chat-heading">
+            <h1 id="conv-title">新对话</h1>
+            <div id="output-meta" class="output-meta">选择历史记录，或在下方写下任务</div>
           </div>
-          <div id="status" class="status idle">● Idle</div>
+          <div id="status" class="status idle">● 空闲</div>
+          <div class="chat-actions">
+            <div class="output-tabs" role="tablist">
+              <button id="structured-tab" class="selected" title="结构化输出">对话</button
+              ><button id="raw-tab" title="原始终端输出">终端</button>
+            </div>
+            <button id="export" title="导出为 Markdown">导出</button
+            ><button id="files-toggle" title="浏览、下载项目文件">文件</button>
+          </div>
         </header>
         <div id="demo-banner" class="demo-banner" hidden>DEMO · 独立临时目录 · 模拟输出和费用 · 不调用模型</div>
         <div id="notice" class="notice" role="status" hidden></div>
-        <div class="deck">
-          <section class="composer">
-            <div class="section-title">
-              <h2>开始一次任务</h2>
-              <span>01 / CONFIGURE</span>
-            </div>
-            <form id="task-form">
-              <label
-                >工作目录<input
-                  id="cwd"
-                  required
-                  placeholder="/home/ubuntu/project"
-              /></label>
-              <div class="fields">
-                <label
-                  >模型<input
-                    id="model"
-                    list="models"
-                    placeholder="沿用 CLI 配置" /><datalist id="models">
-                    <option value="sonnet"></option>
-                    <option value="opus"></option></datalist></label
-                ><label
-                  >推理强度<select id="effort">
-                    <option value="">默认</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="xhigh">Extra high</option>
-                  </select></label
-                >
-              </div>
-              <label
-                >执行权限<select id="permission-mode">
-                  <option value="plan">Plan · 计划与分析</option>
-                  <option value="acceptEdits">
-                    Accept edits · 允许文件编辑
-                  </option>
-                <option value="dontAsk">Don’t ask · 仅使用已允许的工具</option></select></label
-              >
-              <details>
-                <summary>更多上下文目录</summary>
-                <label
-                  >每行一个绝对路径<textarea
-                    id="context-paths"
-                    rows="2"
-                    placeholder="/home/ubuntu/shared"
-                  ></textarea></label
-                ><small>附加目录授权给 Claude；权限模式不是操作系统沙箱。</small>
-              </details>
-              <label>任务预算上限 · USD<input id="budget" type="number" min="0.01" max="1000" step="0.01" placeholder="可选，例如 1.00" /></label>
-              <small>使用 CLI 的预算限制；统计金额由 Claude 返回。</small>
-              <div class="divider"></div>
-              <div class="label-row">
-                <label for="prompt">任务指令</label><span>QUICK ACTIONS</span>
-              </div>
-              <div class="presets">
-                <button type="button" data-preset="review">◎ 代码评审</button
-                ><button type="button" data-preset="tests">▤ 生成单测</button
-                ><button type="button" data-preset="debug">◇ Bug 排查</button
-                ><button type="button" data-preset="refactor">
-                  ↗ 代码重构
-                </button>
-              </div>
-              <div id="resume-banner" class="resume-banner" hidden>
-                <span id="resume-label"></span><label class="fork"><input type="checkbox" id="fork-session" /> 分叉为新会话</label
-                ><button type="button" id="cancel-resume">取消</button>
-              </div>
-              <textarea
-                id="prompt"
-                rows="8"
-                required
-                maxlength="50000"
-                placeholder="描述你的目标、相关文件和预期结果…"
-              ></textarea>
-              <div class="attachment-zone" id="drop-zone"><label class="attach-button" for="attachments">↥ 上传截图 / 文件</label><input id="attachments" type="file" multiple hidden /><span id="upload-status">拖入文件或粘贴截图 · 25 MiB / 文件</span></div>
-              <div class="submit-row">
-                <span>⌘ / Ctrl + Enter 执行</span
-                ><button id="run" class="primary">
-                  执行任务 <span>↗</span>
-                </button>
-              </div>
-            </form>
-            <p class="hint">
-              在服务器上运行 Claude CLI，使用其已有模型与登录配置。
-            </p>
-          </section>
-          <section class="console">
-            <div class="section-title">
-              <h2>执行输出</h2>
-              <span>02 / OBSERVE</span>
-            </div>
-            <div class="console-toolbar">
-              <div class="output-tabs">
-                <button id="structured-tab" class="selected">结构化</button
-                ><button id="raw-tab">Raw Terminal</button>
-              </div>
-              <div>
-                <button id="export" title="导出当前记录">导出</button
-                ><button id="stop" class="danger" disabled>■ 中断</button>
-              </div>
-            </div>
-            <div id="output-meta" class="output-meta">
-              等待任务 · 实时输出将在此显示
-            </div>
-            <div id="metrics" class="metrics" hidden></div>
-            <div id="structured" class="output">
+        <div class="stage">
+          <div id="structured" class="output">
+            <div id="thread" class="thread"></div>
+            <div id="turn" class="turn">
               <div class="empty">
                 <div class="empty-symbol">⌘</div>
-                <h3>让下一步更清晰</h3>
-                <p>
-                  选择快捷指令，或写下你的任务。<br />代码、执行过程和结果会实时出现在这里。
-                </p>
-                <span>CONNECTED TO YOUR CLI</span>
+                <h3>今天想让 Claude 做什么？</h3>
+                <p>在下方描述任务，或选一个快捷指令。<br />执行过程和结果会实时出现在这里，关掉页面也不会中断。</p>
               </div>
             </div>
-            <div id="raw" hidden></div>
-            <div class="console-footer">
-              <span id="connection">SSE · 等待连接</span
-              ><span>LOCAL DATA · NO CLOUD STORAGE</span>
+          </div>
+          <div id="raw" hidden></div>
+        </div>
+        <form id="task-form" class="composer">
+          <div id="metrics" class="metrics" hidden></div>
+          <div id="task-settings" class="task-settings" hidden>
+            <label>工作目录<input id="cwd" required placeholder="/home/ubuntu/project" /></label>
+            <div class="fields">
+              <label>模型<input id="model" list="models" placeholder="沿用 CLI 配置" /><datalist id="models">
+                  <option value="sonnet"></option>
+                  <option value="opus"></option></datalist></label
+              ><label>推理强度<select id="effort">
+                  <option value="">默认</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="xhigh">Extra high</option>
+                </select></label
+              ><label>执行权限<select id="permission-mode">
+                  <option value="plan">Plan · 只分析不改动</option>
+                  <option value="acceptEdits">Accept edits · 允许编辑文件</option>
+                  <option value="dontAsk">Don’t ask · 仅用已允许的工具</option>
+                </select></label
+              ><label>预算上限 · USD<input id="budget" type="number" min="0.01" max="1000" step="0.01" placeholder="可选，如 1.00" /></label>
             </div>
-          </section>
-        </div>
-        <section class="file-browser" id="file-browser">
-          <div class="section-title"><h2>项目文件 <small>FILES & ARTIFACTS</small></h2><button id="files-refresh" type="button">刷新 ↻</button></div>
-          <div id="files-path" class="output-meta"></div><div id="files-list"></div>
-        </section>
-        <div class="bottom-note">
-          CLAUDE WEBDESK <span>为远程开发而生。把工作留在服务器上。</span>
-        </div>
+            <label>更多上下文目录 · 每行一个绝对路径<textarea id="context-paths" rows="1" placeholder="/home/ubuntu/shared"></textarea></label>
+            <small>附加目录授权给 Claude；权限模式不是操作系统沙箱。预算由 CLI 限制，金额以 Claude 返回为准。</small>
+          </div>
+          <div class="presets" id="presets">
+            <button type="button" data-preset="review">◎ 代码评审</button
+            ><button type="button" data-preset="tests">▤ 生成单测</button
+            ><button type="button" data-preset="debug">◇ Bug 排查</button
+            ><button type="button" data-preset="refactor">↗ 代码重构</button>
+          </div>
+          <div id="resume-banner" class="resume-banner" hidden>
+            <span id="resume-label"></span
+            ><label class="fork" title="从该会话复制上下文，开启一个独立的新会话"><input type="checkbox" id="fork-session" /> 分叉</label
+            ><button type="button" id="cancel-resume" title="改为开启新对话">新对话 ×</button>
+          </div>
+          <div class="input-box" id="drop-zone">
+            <textarea
+              id="prompt"
+              rows="3"
+              required
+              maxlength="50000"
+              aria-label="任务指令"
+              placeholder="描述你的目标、相关文件和预期结果…  可粘贴截图或拖入文件"
+            ></textarea>
+            <div class="input-tools">
+              <label class="attach-button" for="attachments" title="上传截图 / 文件（25 MiB / 文件）">＋ 附件</label
+              ><input id="attachments" type="file" multiple hidden
+              /><button type="button" id="settings-toggle" class="settings-chip" aria-expanded="false" title="工作目录、模型、权限与预算"></button
+              ><button type="button" id="follow-up" class="ghost" title="在当前任务的 Claude 会话中继续追问" hidden>↪ 继续此对话</button>
+              <span class="grow"></span>
+              <span class="kbd-hint">Ctrl / ⌘ + Enter</span>
+              <button id="stop" type="button" class="danger" disabled hidden>■ 中断</button
+              ><button id="run" class="primary">发送 ↗</button>
+            </div>
+          </div>
+          <div class="composer-foot">
+            <span id="upload-status">在服务器上运行 Claude CLI，使用其已有登录配置</span>
+            <span id="connection"></span>
+          </div>
+        </form>
       </main>
+      <aside class="file-browser" id="file-browser" hidden>
+        <div class="section-title">
+          <h2>项目文件</h2>
+          <div><button id="files-refresh" type="button" title="刷新">↻</button
+          ><button id="files-close" type="button" title="关闭">×</button></div>
+        </div>
+        <div id="files-path" class="output-meta"></div>
+        <div id="files-list"></div>
+      </aside>
       <main id="plugin-view" class="plugin-main" hidden>
         <header class="plugin-header">
-          <div>
+          <button type="button" class="menu-toggle" aria-label="打开侧边栏">☰</button>
+          <div class="grow">
             <span class="eyebrow">TOOLS / WORKSPACE</span>
             <h1 id="plugin-title"></h1>
             <p id="plugin-description"></p>
